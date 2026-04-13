@@ -398,7 +398,7 @@ This section covers the various tables which this daemon creates/uses in Redis D
 ```
 key                       = SWITCH_HOST_POWER_ON_DELAY |default   ; Config DB on BMC
 ; field                   = value
-power_on_delay            = integer                               ; Time in secs after power on the device, switch BMC can power on the Switch-Host. ( default = -1, Switch-Host remain powered off ).   
+power_on_delay            = integer                               ; Time in secs after power on the device, switch BMC can power on the Switch-Host.
                                                                   ; If non-zero and BMC receives POWER ON from Rack manager before this timeout + there are no critical events, BMC will power on Switch-Host.
 
 key                       = HOST_STATE|switch-host                             ; STATE_DB on BMC to store state of Switch-Host
@@ -626,19 +626,22 @@ CLI to enable user to graceful power on/off the Switch-Host, and to configure po
 Applicable to (LC, AC)
 
 ```
-config chassis modules startup <Switch-Host>
+config chassis modules startup SWITCH-HOST
    - This command is to POWER ON the Switch Host from BMC
+   - Sets the "admin_status to up
 
-config chassis modules shutdown <Switch-Host>
+config chassis modules shutdown SWITCH-HOST
    - This command is to graceful POWER OFF the Switch Host from BMC
+   - Sets the "admin_status to down
+   - Default admin_status of SWITCH-HOST is down which keeps SWITCH-HOST powered down when device powers up.
 
-config chassis modules power-on-delay <Switch-Host> <seconds>
+config chassis modules power-on-delay SWITCH-HOST <seconds>
    - Configure the delay (in seconds) BMC waits after power-on before powering on the Switch-Host.
-   - Default = -1, Switch-Host remain powered off. This default value is selected as -1 so that in SI phase Switch-Host needs to be powered on manually.
+   - Default = 0, default is 0 secs which tells Switch-Host to power on immediately if admin_status is up
    - If non-zero BMC receives a POWER ON from Rack Manager before this timeout elapses (and no critical events exist),
      Switch-Host will be powered on immediately.
 
-config chassis modules shutdown-timeout <Switch-Host> <seconds>
+config chassis modules shutdown-timeout SWITCH-HOST <seconds>
    - Configure the graceful-shutdown timeout (in seconds) BMC waits after sending a shutdown command
      to the Switch-Host before forcing a hard power-off via the platform API.
    - Default = 120sec. 
@@ -652,8 +655,8 @@ config chassis modules shutdown-timeout <Switch-Host> <seconds>
 ```
     "CHASSIS_MODULE": {
         "SWITCH-HOST": {
-            "admin_status": "up",
-            "power_on_delay": "300",              ; Time in secs BMC waits before powering on Switch-Host (default = -1, Switch-Host remain powered off)
+            "admin_status": "up",                 ; admin_status up/down; default is down which keeps SWITCH-HOST powered down when device powers up.
+            "power_on_delay": "300",              ; Time in secs BMC waits before powering on Switch-Host when device is powered ON.
             "graceful_shutdown_timeout" : "120"   ; Time in secs BMC waits for graceful shutdown before forcing power-off (default = 120sec)
         }
     }    
