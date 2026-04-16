@@ -84,19 +84,17 @@ The SONiC in BMC interoperates with the SONiC in Switch-Host as in below diagram
 
 ## 2. Detailed Architecture and workflows
 ### 2.1 BMC platform
-Update the <vendor>/<platform>/platform_env.conf with the following flags,
+Update the [vendor]/[platform]/platform_env.conf with the following flags,
 ```
 switch_host=1
-liquid_cooled=true
 ```
 ```
 switch_bmc=1
-liquid_cooled=true
 ```
 
-* "liquid_cooled" flag is set to true on a liquid cooled switch OR hybrid cooled switch.
 * "switch_host" flag is set to 1 on the switch host, "switch_bmc" flag is set to 1 on the switch BMC.
-
+* "liquid_cooled" flag is not set in this file as the same BMC platform/sku could be used for both air cooled and liquid cooled devices.
+  So instead we will introduce a platform API to get whether this is a liquid cooled or air cooled device.
 
 #### 2.1.1 BMC platform power up
 When device is powered ON, the BMC powers first, boots up the sonic BMC which starts the various containers
@@ -607,7 +605,8 @@ This base class is already defined in sonic-platform-common.
 | Method | Present | Action |
 |---------|---------|----------|
 | get_all_modules() | Y | Fetch managed modules here, Switch-Host Module object |
-
+| is_bmc() | New | Retrieves whether the sonic chassis instance is/has a BMC module |
+| is_liquid_cooled_chassis() | New | Is this chassis liquid/hybrid cooled ? |
 
 ### 2.3 BMC CLI Commands
 
