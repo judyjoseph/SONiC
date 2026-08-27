@@ -449,8 +449,8 @@ The main thermalctld daemon will run the sonic thermal policy based on the numbe
        | Individual Leak Sensor Condition     | Individual Leak Sensor Severity (Input)   | System Leak Severity (Output) |
        +--------------------------------------+-------------------------------------------+-------------------------------+
        | 1 Critical leak                      |                   CRITICAL                | CRITICAL_SYSTEM_LEAK          |
-       | 2 or more leaks (any severity)       |                 Any Severity              | CRITICAL_SYSTEM_LEAK          |
        | 1 Minor leak staying for MAX-T secs  |                   MINOR                   | CRITICAL_SYSTEM_LEAK          |
+       | 2 or more Minor leaks                |                   MINOR                   | MAJOR_SYSTEM_LEAK             |
        | 1 Minor leak detected                |                   MINOR                   | MINOR_SYSTEM_LEAK             |
        +--------------------------------------+-------------------------------------------+-------------------------------+
 
@@ -458,6 +458,7 @@ The main thermalctld daemon will run the sonic thermal policy based on the numbe
        - MAX-T secs defined before which a MINOR leak can be considered CRITICAL.
 
     - Update the system SYSTEM_LEAK_STATUS table with the severity of leak. This will be used in bmcctld process.
+    - A new classification of MAJOR_SYSTEM_LEAK is introduced to identify more than one Minor leaks, which needs a quick action not necessarily a power off.
 
 ```
  
@@ -482,7 +483,7 @@ max_minor_duration_sec    = integer                                   ; MAX-T se
 
 key                       = SYSTEM_LEAK_STATUS|system                  ; system bmc leak status in STATE DB
 ; field                   = value
-device_leak_status        = "status"                                  ; CRITICAL_SYSTEM_LEAK/MINOR_SYSTEM_LEAK (system aggregate level)
+device_leak_status        = "status"                                  ; CRITICAL_SYSTEM_LEAK/MAJOR_SYSTEM_LEAK/MINOR_SYSTEM_LEAK (system aggregate level)
 timestamp                 = STR                                       ; timestamp when this status is recorded.
 ```     
 
@@ -707,7 +708,8 @@ config liquid-cool leak-action [system|rack_mgr] [critical|minor]  [syslog_only|
 ```
   "LEAK_CONTROL_POLICY": {                                      ; In CONFIG_DB
       "system_leak_policy"            : "enabled | disabled",   ; enabled by default
-      "system_critical_leak_action"   : "power_off",            ; default is power_off   
+      "system_critical_leak_action"   : "power_off",            ; default is power_off
+      "system_major_leak_action"      : "syslog_only",          ; default is syslog_only 
       "system_minor_leak_action"      : "syslog_only",          ; default is syslog_only
       "rack_mgr_leak_policy"          : "enabled | disabled",   ; enabled by default
       "rack_mgr_critical_alert_action": "syslog_only",          ; default is syslog_only
@@ -786,6 +788,7 @@ Applicable to (LC)
 show platform leak control-policy
  system_leak_policy              : enabled
  system_critical_leak_action     : power_off
+ system_major_leak_action        : syslog_only
  system_minor_leak_action        : syslog_only
  rack_mgr_leak_policy            : enabled
  rack_mgr_critical_alert_action  : syslog_only
