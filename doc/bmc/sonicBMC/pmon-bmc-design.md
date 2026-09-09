@@ -247,7 +247,7 @@ BMC controls the State of the Switch-Host based on various factors/events. Defin
 | Event | Source | Description |
 |-------|--------|-------------|
 | `SYSTEM_LEAK_CRITICAL_EVENT` | thermalctld | A critical leak severity has been determined locally by thermalctld based on leak sensor data. See severity algorithm in [2.2.2 thermalctld](#222-thermalctld) and `SYSTEM_LEAK_STATUS` table. |
-| `SYSTEM_LEAK_MAJOR_EVENT` | thermalctld | MAX-N or more minor leak sensors have been detected locally (aggregate system severity), which needs a quick action but not necessarily a power off. See severity algorithm in [2.2.2 thermalctld](#222-thermalctld) and `SYSTEM_LEAK_STATUS` table. |
+| `SYSTEM_LEAK_MAJOR_EVENT` | thermalctld | MIN-N or more minor leak sensors have been detected locally (aggregate system severity), which needs a quick action but not necessarily a power off. See severity algorithm in [2.2.2 thermalctld](#222-thermalctld) and `SYSTEM_LEAK_STATUS` table. |
 | `SYSTEM_LEAK_MINOR_EVENT` | thermalctld | A single minor leak sensor has been detected locally and has not yet exceeded the escalation timer `max_minor_duration_sec`. See [2.2.2 thermalctld](#222-thermalctld) and `LEAK_PROFILE` table. |
 | `RACK_MGR_CRITICAL_EVENT` |  Rack Manager | A CRITICAL severity alert posted by the Rack Manager via Redfish (e.g. inlet temperature, flow rate, pressure, or rack-level leak). See [2.1.2 BMC Rack Manager Interaction](#212-bmc-rack-manager-interaction) and `RACK_MANAGER_ALERT` table. |
 | `RACK_MGR_MAJOR_EVENT` |  Rack Manager | A MAJOR severity alert posted by the Rack Manager via Redfish. See [2.1.2 BMC Rack Manager Interaction](#212-bmc-rack-manager-interaction) and `RACK_MANAGER_ALERT` table. |
@@ -466,17 +466,17 @@ The main thermalctld daemon will run the sonic thermal policy based on the numbe
        +--------------------------------------+-------------------------------------------+-------------------------------+
        | 1 Critical leak                      |                   CRITICAL                | CRITICAL_SYSTEM_LEAK          |
        | 1 Minor leak staying for MAX-T secs  |                   MINOR                   | CRITICAL_SYSTEM_LEAK          |
-       | MAX-N or more Minor leaks            |                   MINOR                   | MAJOR_SYSTEM_LEAK             |
+       | MIN-N or more Minor leaks            |                   MINOR                   | MAJOR_SYSTEM_LEAK             |
        | 1 Minor leak detected                |                   MINOR                   | MINOR_SYSTEM_LEAK             |
        +--------------------------------------+-------------------------------------------+-------------------------------+
 
     - Additional considerations, the timers and thresholds can be configured.
        - MAX-T secs defined before which a MINOR leak can be considered CRITICAL (per leak sensor profile).
-       - MAX-N is the number of concurrent Minor leaks at or above which the system is classified as MAJOR_SYSTEM_LEAK. The default is a system-wide value provided by the platform API `get_major_leak_num_min_sensors()` (LiquidCoolingBase). A user can override it by configuring `system_major_leak_num_min_sensors` in LEAK_CONTROL_POLICY. If the platform API returns 0, the platform does not support the MAJOR classification and thermalctld does not apply MAJOR_SYSTEM_LEAK.
+       - MIN-N is the number of concurrent Minor leaks at or above which the system is classified as MAJOR_SYSTEM_LEAK. The default is a system-wide value provided by the platform API `get_major_leak_num_min_sensors()` (LiquidCoolingBase). A user can override it by configuring `system_major_leak_num_min_sensors` in LEAK_CONTROL_POLICY. If the platform API returns 0, the platform does not support the MAJOR classification and thermalctld does not apply MAJOR_SYSTEM_LEAK.
 
     - Update the system SYSTEM_LEAK_STATUS table with the severity of leak. This will be used in bmcctld process.
-    - A new classification of MAJOR_SYSTEM_LEAK is introduced to identify MAX-N or more Minor leaks, which needs a quick action not necessarily a power off.
-       - The motivation is that an external tool/consumer cannot look back over an infinite time window to aggregate MAX-N or more independent Minor leaks on its own. So thermalctld performs this aggregation locally and flags MAJOR_SYSTEM_LEAK as a higher priority than a single MINOR leak but lower than a CRITICAL leak.
+    - A new classification of MAJOR_SYSTEM_LEAK is introduced to identify MIN-N or more Minor leaks, which needs a quick action not necessarily a power off.
+       - The motivation is that an external tool/consumer cannot look back over an infinite time window to aggregate MIN-N or more independent Minor leaks on its own. So thermalctld performs this aggregation locally and flags MAJOR_SYSTEM_LEAK as a higher priority than a single MINOR leak but lower than a CRITICAL leak.
 
 ```
  
@@ -562,7 +562,7 @@ This base class is already defined in sonic-platform-common.
 | get_leak_sensor(index) | Y | Get per-leak-sensor status |
 | get_leak_sensor_status() | Y | Get all leak sensor status |
 | get_all_leak_sensors() | Y | Get list of all leak sensors |
-| get_major_leak_num_min_sensors() | New | Get MAX-N, the platform-defined minimum number of concurrent Minor leaks at or above which the system is classified as MAJOR_SYSTEM_LEAK. This is a system-wide value (not per sensor) and serves as the default. Could return 0 if a platform does not support the MAJOR classification, in which case thermalctld does not apply MAJOR_SYSTEM_LEAK. A user configured `system_major_leak_num_min_sensors` in LEAK_CONTROL_POLICY overrides this value. |
+| get_major_leak_num_min_sensors() | New | Get MIN-N, the platform-defined minimum number of concurrent Minor leaks at or above which the system is classified as MAJOR_SYSTEM_LEAK. This is a system-wide value (not per sensor). Could return 0 if a platform does not support the MAJOR classification, in which case thermalctld does not apply MAJOR_SYSTEM_LEAK. A user configured `system_major_leak_num_min_sensors` in LEAK_CONTROL_POLICY overrides this value. |
 
 
 ####  ModuleBase
@@ -724,7 +724,7 @@ config liquid-cool leak-action [system|rack_mgr] [critical|major|minor]  [syslog
 
 * **config liquid-cool major-leak-threshold**
 
-CLI to configure MAX-N, the number of concurrent Minor leaks at or above which thermalctld classifies the system as MAJOR_SYSTEM_LEAK. This overrides the platform-provided default from `get_major_leak_num_min_sensors()`.
+CLI to configure MIN-N, the number of concurrent Minor leaks at or above which thermalctld classifies the system as MAJOR_SYSTEM_LEAK. This overrides the platform-provided default from `get_major_leak_num_min_sensors()`.
 Applicable to (LC)
 
 ```
@@ -738,7 +738,7 @@ config liquid-cool major-leak-threshold <N>
 ```
   "LEAK_CONTROL_POLICY": {                                      ; In CONFIG_DB
       "system_leak_policy"                : "enabled | disabled",   ; enabled by default
-      "system_major_leak_num_min_sensors" : "<N>",                  ; MAX-N: optional user override (integer >= 2); absent by default, in which case thermalctld uses the platform API value
+      "system_major_leak_num_min_sensors" : "<N>",                  ; MIN-N: optional user override (integer >= 2); absent by default, in which case thermalctld uses the platform API value
       "system_critical_leak_action"       : "power_off",            ; default is power_off
       "system_major_leak_action"          : "syslog_only",          ; default is syslog_only
       "system_minor_leak_action"          : "syslog_only",          ; default is syslog_only
@@ -815,7 +815,7 @@ SWITCH-HOST  Switch Host   online        up             ABC123   300            
 Command to show leak control policy configuration
 Applicable to (LC)
 
-**Note:** The `system_major_leak_num_min_sensors` (MAX-N) line is omitted when the platform API `get_major_leak_num_min_sensors()` returns 0, i.e. the platform does not support the MAJOR_SYSTEM_LEAK classification.
+**Note:** The `system_major_leak_num_min_sensors` (MIN-N) line is omitted when the platform API `get_major_leak_num_min_sensors()` returns 0, i.e. the platform does not support the MAJOR_SYSTEM_LEAK classification.
 
 ```
 
