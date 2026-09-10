@@ -247,7 +247,7 @@ BMC controls the State of the Switch-Host based on various factors/events. Defin
 | Event | Source | Description |
 |-------|--------|-------------|
 | `SYSTEM_LEAK_CRITICAL_EVENT` | thermalctld | A critical leak severity has been determined locally by thermalctld based on leak sensor data. See severity algorithm in [2.2.2 thermalctld](#222-thermalctld) and `SYSTEM_LEAK_STATUS` table. |
-| `SYSTEM_LEAK_MAJOR_EVENT` | thermalctld | MIN-N or more minor leak sensors have been detected locally (aggregate system severity), which needs a quick action but not necessarily a power off. See severity algorithm in [2.2.2 thermalctld](#222-thermalctld) and `SYSTEM_LEAK_STATUS` table. |
+| `SYSTEM_LEAK_MAJOR_EVENT` | thermalctld | MIN-N or more minor leak sensors have been detected locally, OR a single minor leak sensor has persisted beyond the escalation timer `max_minor_duration_sec` (MAX-T secs) (aggregate system severity), which needs a quick action but not necessarily a power off. See severity algorithm in [2.2.2 thermalctld](#222-thermalctld) and `SYSTEM_LEAK_STATUS` table. |
 | `SYSTEM_LEAK_MINOR_EVENT` | thermalctld | A single minor leak sensor has been detected locally and has not yet exceeded the escalation timer `max_minor_duration_sec`. See [2.2.2 thermalctld](#222-thermalctld) and `LEAK_PROFILE` table. |
 | `RACK_MGR_CRITICAL_EVENT` |  Rack Manager | A CRITICAL severity alert posted by the Rack Manager via Redfish (e.g. inlet temperature, flow rate, pressure, or rack-level leak). See [2.1.2 BMC Rack Manager Interaction](#212-bmc-rack-manager-interaction) and `RACK_MANAGER_ALERT` table. |
 | `RACK_MGR_MAJOR_EVENT` |  Rack Manager | A MAJOR severity alert posted by the Rack Manager via Redfish. See [2.1.2 BMC Rack Manager Interaction](#212-bmc-rack-manager-interaction) and `RACK_MANAGER_ALERT` table. |
@@ -458,24 +458,24 @@ The main thermalctld daemon will run the sonic thermal policy based on the numbe
     - Apply the System leak severity detection algorithm as below
     - The conditions are evaluated top-down and the first matching row determines the System Leak Severity.
       Thus CRITICAL_SYSTEM_LEAK takes precedence over MAJOR_SYSTEM_LEAK, which takes precedence over MINOR_SYSTEM_LEAK.
-      So if any single sensor is CRITICAL (reported directly or escalated after MAX-T secs), the system is CRITICAL_SYSTEM_LEAK
-      even when other Minor leaks are present.
+      So if any single sensor is CRITICAL, the system is CRITICAL_SYSTEM_LEAK
+      even when other Minor leaks are present. A single Minor leak that persists beyond MAX-T secs escalates the system to MAJOR_SYSTEM_LEAK.
        
        +--------------------------------------+-------------------------------------------+-------------------------------+
        | Individual Leak Sensor Condition     | Individual Leak Sensor Severity (Input)   | System Leak Severity (Output) |
        +--------------------------------------+-------------------------------------------+-------------------------------+
        | 1 Critical leak                      |                   CRITICAL                | CRITICAL_SYSTEM_LEAK          |
-       | 1 Minor leak staying for MAX-T secs  |                   MINOR                   | CRITICAL_SYSTEM_LEAK          |
+       | 1 Minor leak staying for MAX-T secs  |                   MINOR                   | MAJOR_SYSTEM_LEAK             |
        | MIN-N or more Minor leaks            |                   MINOR                   | MAJOR_SYSTEM_LEAK             |
        | 1 Minor leak detected                |                   MINOR                   | MINOR_SYSTEM_LEAK             |
        +--------------------------------------+-------------------------------------------+-------------------------------+
 
     - Additional considerations, the timers and thresholds can be configured.
-       - MAX-T secs defined before which a MINOR leak can be considered CRITICAL (per leak sensor profile).
+       - MAX-T secs defined before which a MINOR leak escalates to MAJOR_SYSTEM_LEAK (per leak sensor profile).
        - MIN-N is the number of concurrent Minor leaks at or above which the system is classified as MAJOR_SYSTEM_LEAK. The default is a system-wide value provided by the platform API `get_major_leak_num_min_sensors()` (LiquidCoolingBase). A user can override it by configuring `system_major_leak_num_min_sensors` in LEAK_CONTROL_POLICY. If the platform API returns 0, the platform does not support the MAJOR classification and thermalctld does not apply MAJOR_SYSTEM_LEAK.
 
     - Update the system SYSTEM_LEAK_STATUS table with the severity of leak. This will be used in bmcctld process.
-    - A new classification of MAJOR_SYSTEM_LEAK is introduced to identify MIN-N or more Minor leaks, which needs a quick action not necessarily a power off.
+    - A new classification of MAJOR_SYSTEM_LEAK is introduced to identify MIN-N or more Minor leaks, or a single Minor leak persisting beyond MAX-T secs, which needs a quick action not necessarily a power off.
        - The motivation is that an external tool/consumer cannot look back over an infinite time window to aggregate MIN-N or more independent Minor leaks on its own. So thermalctld performs this aggregation locally and flags MAJOR_SYSTEM_LEAK as a higher priority than a single MINOR leak but lower than a CRITICAL leak.
 
 ```
@@ -497,7 +497,7 @@ timestamp                 = STR                                       ; timestam
 key                       = LEAK_PROFILE|<sensor_type>                ; LEAK profile per leak sensor type in STATE_DB
 ; field                   = value
 leak_type                 = STR                                       ; Leak sensor type
-max_minor_duration_sec    = integer                                   ; MAX-T secs defined before which a MINOR leak can be considered CRITICAL
+max_minor_duration_sec    = integer                                   ; MAX-T secs defined before which a MINOR leak escalates to MAJOR_SYSTEM_LEAK
 
 key                       = SYSTEM_LEAK_STATUS|system                  ; system bmc leak status in STATE DB
 ; field                   = value
@@ -550,7 +550,7 @@ This profile is created per leak sensor type and it will contain tunable paramet
 
 | Method | Present | Action |
 |---------|---------|----------|
-| get_leak_max_minor_duration_sec() | New | Get MAX time in secs before which a minor leak can be marked CRITICAL. This API could return back 0 if a platform don't support this concept of minor severity leak gets critical over time |
+| get_leak_max_minor_duration_sec() | New | Get MAX time in secs before which a minor leak escalates to MAJOR_SYSTEM_LEAK. This API could return back 0 if a platform don't support this concept of minor severity leak escalating over time |
 
 
 #### LiquidCoolingBase
